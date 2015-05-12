@@ -1,21 +1,28 @@
 #!/usr/bin/env python
 
-import numpy
-from numpy import linspace
-import matplotlib.pyplot as plt
-import matplotlib.animation
-import matplotlib.colors
-import matplotlib.cm
-from math import cos, sin, tan, pi, e, fmod
+from __future__ import division
+from math import cos, sin, tan, pi, e, fmod, ceil, floor
 import sys
 import os
 from argparse import ArgumentParser
+import tempfile
+import subprocess
+import shutil
+import cairo
 
-
-__all__ = ('''cos sin tan pi e fmod
-	Plotter Circle Dot Line Graph Drawable FillableDrawable Label
+__all__ = ('''cos sin tan pi e fmod ceil floor
+	Plotter Circle Dot Line Graph Drawable Label
 	angle shift eval_at formatter
 	global_registry'''.split())
+
+
+COLORS = {'none': (0,0,0,0), 'black': (0,0,0,1), 'red': (1,0,0,1), 'green': (0,1,0,1),
+          'blue': (0,0,1,1), 'white': (1,1,1,1)}
+COLORS['r'] = COLORS['red']
+COLORS['w'] = COLORS['white']
+COLORS['k'] = COLORS['black']
+COLORS['g'] = COLORS['green']
+COLORS['b'] = COLORS['blue']
 
 
 global_registry = []
@@ -36,67 +43,103 @@ def eval_at(f, t):
 def formatter(s):
 	return s.__mod__
 
+def linspace(start, stop, num=51):
+	def do():
+		diff = stop - start
+		for i in xrange(num):
+			yield start + diff * i / (num - 1)
+	return list(do())
+
+def obj_to_rgba(s):
+	if s in COLORS:
+		return COLORS[s]
+	if str(s).startswith('#'):
+		n = int(s[1:], 16)
+		if len(s) == 7:
+			return (n >> 24 / 255., ((n >> 16) & 0xFF) / 255., (n & 0xFF) / 255., 1)
+		elif len(s) == 9:
+			return (n >> 32 / 255., ((n >> 24) & 0xFF) / 255., ((n >> 8) & 0xFF) / 255., (n & 0xFF) / 255.)
+	return s
+
 
 class Plotter:
 	def __init__(self):
-		self.fig = plt.figure()#facecolor='#000000')
-		self.anim = None
-
-		plt.axis('off')
-		plt.axis('equal')
+		self.width = 512
+		self.height = 512
+		self.win = [-1, -1, 1, 1]
+		self.nframes = 25
+		self.nsteps = 51
 
 	def set_resolution(self, x, y):
-		dpi = 100.
-		self.fig.set_dpi(dpi)
-		self.fig.set_size_inches(x / dpi, y / dpi)
+		self.width = x
+		self.height = y
 
 	def set_window(self, minx, miny, maxx, maxy):
-		plt.xlim(minx, maxx)
-		plt.ylim(miny, maxy)
+		self.win = [minx, miny, maxx, maxy]
 
-	# TODO setup axes, etc
-	def _plot(self, objs, t_start, t_end):
-		def draw(t):
-			for obj, plot in zip(objs, plots):
-				obj.draw(t, plot)
-			return plots
+	def set_frames(self, n):
+		self.nframes = n
 
+	def set_steps(self, n):
+		self.nsteps = n
+
+	def _create_cairo(self):
+		surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.width, self.height)
+		ctx = cairo.Context(surface)
+		ctx.translate((self.win[0] + self.win[2]) / 2, (self.win[1] + self.win[3]) / 2)
+		ctx.scale(self.width / (self.win[2] - self.win[0]), self.height / (self.win[3] - self.win[1]))
+		ctx.translate(-(self.win[0] + self.win[2]) / 2, -(self.win[1] + self.win[3]) / 2)
+		ctx.translate((self.win[2] - self.win[0]) / 2, (self.win[3] - self.win[1]) / 2)
+		return surface, ctx
+
+	def _draw(self, objs, frame_cb, t_start=0, t_end=1):
 		objs = [obj for obj in objs if obj.visible]
-		plots = [obj.create() for obj in objs]
 
-		t_values = linspace(t_start, t_end)
+		t_values = linspace(t_start, t_end, self.nsteps)
+		for i in xrange(self.nframes):
+			bound = 1 + ceil((len(t_values) - 1) * i / (self.nframes - 1))
+			bound = int(bound)
+			ts = t_values[:bound]
+			surface, ctx = self._create_cairo()
+			for obj in objs:
+				obj.draw(ts, ctx)
+			frame_cb(surface, ctx, i)
 
-		self.anim = matplotlib.animation.FuncAnimation(self.fig, draw, frames=t_values, blit=True)
+	def save_png(self, objs, pattern, t_start=0, t_end=1):
+		def save(surface, ctx, i):
+			surface.write_to_png('%s-%03d.png' % (pattern, i))
+		self._draw(objs, save, t_start, t_end)
 
-	def show(self, objs, t_start=0, t_end=1):
-		self._plot(objs, t_start, t_end)
-		plt.show()
+	def save_gif(self, objs, f, delay=100, t_start=0, t_end=1):
+		def save(surface, ctx, i):
+			png = os.path.join(tmp, '%06d.png' % i)
+			surface.write_to_png(png)
+			files.append(png)
 
-	def save(self, objs, file, t_start=0, t_end=1):
-		self._plot(objs, t_start, t_end)
-		self.anim.save(file, 'imagemagick')
+		files = []
+		tmp = tempfile.mkdtemp()
+		try:
+			self._draw(objs, save, t_start, t_end)
+			subprocess.call(['convert', '-loop', '0', '-dispose', 'previous', '-delay', str(delay)] + files + [f])
+		finally:
+			shutil.rmtree(tmp)
 
 
 class Drawable(object):
-	def __init__(self, fill_color='none', border_color=None, border_width=None, alpha=1, hidden=False, register=True):
-		self.fill_color = fill_color or 'none'
-		self.border_color = border_color or 'black'
-		self.border_width = border_width
-		self.alpha = alpha
+	def __init__(self, fill_color='none', border_color=None, border_width=None, hidden=False, register=True):
+		self.fill_color = obj_to_rgba(fill_color or 'none')
+		self.border_color = obj_to_rgba(border_color or 'black')
+		self.border_width = border_width or 0.01
 
 		self.visible = not hidden
 		if register:
 			global_registry.append(self)
 
-
-class FillableDrawable(Drawable):
-	def create(self):
-		plot, = plt.fill([0], [0], facecolor=self.fill_color, edgecolor=self.border_color, linewidth=self.border_width)
-		plot.set_alpha(self.alpha)
-		return plot
+	def draw(self, ts, ctx):
+		raise NotImplementedError()
 
 
-class Circle(FillableDrawable):
+class Circle(Drawable):
 	def __init__(self, center, radius, full=True, angle=angle, **kw):
 		super(Circle, self).__init__(**kw)
 
@@ -114,17 +157,21 @@ class Circle(FillableDrawable):
 	def angle(self, t):
 		return eval_at(self._angle, t)
 
-	def draw(self, t_end, plot):
-		c = self.center(t_end)
-		r = self.radius(t_end)
-		
+	def draw(self, ts, ctx):
+		c = self.center(ts[-1])
+		r = self.radius(ts[-1])
+
 		if self.full:
 			max = 1
 		else:
 			max = t_end
 
-		plot.set_xy(numpy.array([[cos(self.angle(t)) * r + c[0] for t in linspace(0, max)],
-		                         [sin(self.angle(t)) * r + c[1] for t in linspace(0, max)]]).T)
+		ctx.arc(c[0], c[1], r, 0, max * 2 * pi)
+		ctx.set_line_width(self.border_width)
+		ctx.set_source_rgba(*self.fill_color)
+		ctx.fill_preserve()
+		ctx.set_source_rgba(*self.border_color)
+		ctx.stroke()
 
 	def value(self, t):
 		c = self.center(t)
@@ -156,23 +203,19 @@ class Line(Drawable):
 		p1 = self.p1(t)
 		p2 = self.p2(t)
 		return ((1 - t) * p1[0] + t * p2[0]), ((1 - t) * p1[1] + t * p2[1])
-	
-	def create(self):
-		k = {}
-		if self.border_width is not None:
-			k['linewidth'] = self.border_width
-		plot, = plt.plot([], [], color=self.border_color, **k)
-		plot.set_alpha(self.alpha)
-		return plot
 
-	def draw(self, t_end, plot):
-		p1 = self.p1(t_end)
-		#v = self.value(t_end)
-		p2 = self.p2(t_end)
-		plot.set_data([p1[0], p2[0]], [p1[1], p2[1]])
+	def draw(self, ts, ctx):
+		p1 = self.p1(ts[-1])
+		p2 = self.p2(ts[-1])
+
+		ctx.set_line_width(self.border_width)
+		ctx.set_source_rgba(*self.border_color)
+		ctx.move_to(p1[0], p1[1])
+		ctx.line_to(p2[0], p2[1])
+		ctx.stroke()
 
 
-class Graph(FillableDrawable):
+class Graph(Drawable):
 	def __init__(self, f, **kw):
 		super(Graph, self).__init__(**kw)
 		self._f = f
@@ -180,76 +223,67 @@ class Graph(FillableDrawable):
 	def value(self, t):
 		return self._f(t)
 
-	def draw(self, t_end, plot):
+	def draw(self, ts, ctx):
 		# TODO be smarter for the number of points and placement/density of points
-		points = numpy.array(list(self.points(linspace(0, t_end, max(1, t_end * 200)))))
-		plot.set_closed(False)
-		plot.set_xy(points)
+		first = True
+		for t in ts:
+			if first:
+				ctx.move_to(*self._f(t))
+			else:
+				ctx.line_to(*self._f(t))
+			first = False
 
-	def points(self, t_values):
-		for t in t_values:
-			yield self._f(t)
+		ctx.set_line_width(self.border_width)
+		ctx.set_source_rgba(*self.fill_color)
+		ctx.fill_preserve()
+		ctx.set_source_rgba(*self.border_color)
+		ctx.stroke()
 
 
 class Label(Drawable):
-	def __init__(self, text, pos, **kw):
+	def __init__(self, text, pos, size=1, **kw):
 		super(Label, self).__init__(**kw)
 		self._text = text
+		self._size = size
 		self._pos = pos
-	
-	def create(self):
-		plot = plt.text(0, 0, '', color=self.fill_color)
-		return plot
-	
-	def draw(self, t, plot):
-		pos = eval_at(self._pos, t)
-		plot.set_position(pos)
-		plot.set_text(eval_at(self._text, t))
 
-
-class Annotation(Drawable):
-	def __init__(self, text, pos, **kw):
-		super(Annotation, self).__init__(**kw)
-		self._text = text
-		self._pos = pos
-	
-	def create(self):
-		plot = plt.annotate('', (0, 0), xycoords='data', color=self.fill_color, arrowprops=dict(arrowstyle="->"))
-		return plot
-	
-	def draw(self, t, plot):
-		pos = eval_at(self._pos, t)
-		plot.xy = pos
-		plot.xytext = plot.xy
-		plot.set_text(eval_at(self._text, t))
+	def draw(self, ts, ctx):
+		ctx.move_to(*eval_at(self._pos, ts[-1]))
+		ctx.set_font_size(eval_at(self._size, ts[-1]))
+		ctx.set_source_rgba(*self.fill_color)
+		ctx.show_text(eval_at(self._text, ts[-1]))
+		ctx.fill()
 
 
 def run_file(opts):
 	plotter = Plotter()
 	plotter.set_window(*opts.zone)
 	plotter.set_resolution(*opts.size)
-	
+	plotter.set_frames(opts.frames)
+
 	g = globals()
 	vars = dict((k, g[k]) for k in __all__)
 	vars['plotter'] = plotter
-	module = execfile(opts.geomfile, vars, vars)
+	module = execfile(opts.input, vars, vars)
 
-	if opts.output:
-		plotter.save(global_registry, opts.output)
+	if opts.output.endswith('.gif'):
+		plotter.save_gif(global_registry, opts.output, delay=opts.delay)
 	else:
-		plotter.show(global_registry)
+		plotter.save_png(global_registry, opts.output)
 
 
 def main():
 	argparser = ArgumentParser()
-	argparser.add_argument('geomfile', metavar='FILE')
+	argparser.add_argument('input', metavar='FILE')
+	argparser.add_argument('output', metavar='OUTPUT')
 	argparser.add_argument('--zone', metavar='X,Y,X,Y', help='virtual canvas zone shown by the output image (default: -2,-2,2,2)', default='-2,-2,2,2')
 	argparser.add_argument('--size', metavar='WxH', help='size of output image (width and height, default: 512x512)', default='512x512')
-	argparser.add_argument('-o', '--output', metavar='FILE', dest='output')
+	argparser.add_argument('-n', '--frames', metavar='FRAMES', help='number of frames', type=int, default=25)
+	argparser.add_argument('-d', '--delay', metavar='MS', help='delay between frames (in ms)', type=int, default=50)
 	opts = argparser.parse_args()
 
-#	if not opts.output:
-#		opts.output = os.path.splitext(opts.geomfile)[0] + '.gif'
+	if not opts.output:
+		opts.output = os.path.splitext(opts.geomfile)[0] + '.gif'
 
 	zone = opts.zone.split(',')
 	if len(zone) != 4:
@@ -273,4 +307,3 @@ def main():
 
 if __name__ == '__main__':
 	main()
-
