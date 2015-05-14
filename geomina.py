@@ -29,7 +29,7 @@ global_registry = []
 
 
 def angle(t, start_angle=0):
-	return (t * 2 * pi + start_angle) % (2 * pi)
+	return t * 2 * pi + start_angle
 
 def shift(t, move):
 	return (t + move) % 1
