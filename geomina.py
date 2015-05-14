@@ -140,12 +140,14 @@ class Drawable(object):
 
 
 class Circle(Drawable):
-	def __init__(self, center, radius, full=True, angle=angle, **kw):
+	def __init__(self, center, radius, full=True, angle=angle, sweep_start=None, sweep_end=None, **kw):
 		super(Circle, self).__init__(**kw)
 
 		self._center = center
 		self._radius = radius
 		self._angle = angle
+		self._sweep_start = sweep_start
+		self._sweep_end = sweep_end
 		self.full = full
 
 	def center(self, t):
@@ -157,16 +159,38 @@ class Circle(Drawable):
 	def angle(self, t):
 		return eval_at(self._angle, t)
 
+	def sweep_start(self, t):
+		return eval_at(self._sweep_start, t)
+
+	def sweep_start_value(self, t):
+		c = self.center(t)
+		r = self.radius(t)
+		return (cos(self.sweep_start(t)) * r + c[0], sin(self.sweep_start(t)) * r + c[1])
+
+	def sweep_end(self, t):
+		return eval_at(self._sweep_end, t)
+
+	def sweep_end_value(self, t):
+		c = self.center(t)
+		r = self.radius(t)
+		return (cos(self.sweep_end(t)) * r + c[0], sin(self.sweep_end(t)) * r + c[1])
+
 	def draw(self, ts, ctx):
 		c = self.center(ts[-1])
 		r = self.radius(ts[-1])
 
 		if self.full:
-			max = 1
+			start, end = self.angle(0), self.angle(1)
+		elif self._sweep_start and self._sweep_end:
+			start, end = self.sweep_start(ts[-1]), self.sweep_end(ts[-1])
 		else:
-			max = t_end
+			start, end = self.angle(ts[0]), self.angle(ts[-1])
 
-		ctx.arc(c[0], c[1], r, 0, max * 2 * pi)
+		if start <= end:
+			ctx.arc(c[0], c[1], r, start, end)
+		else:
+			ctx.arc_negative(c[0], c[1], r, start, end)
+
 		ctx.set_line_width(self.border_width)
 		ctx.set_source_rgba(*self.fill_color)
 		ctx.fill_preserve()
