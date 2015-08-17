@@ -1,0 +1,30 @@
+Background(color='w')
+
+b01 = Line((-1, 0),   (-1.5, 2))
+b12 = Line((-1.5, 2), (0.5, 2))
+b23 = Line((0.5, 2),  (1.5, 0))
+b34 = Line((1.5, 0),  (2, 1))
+b02 = Line(b01.value, b12.value, color='g')
+b02_0 = Dot(b01.value, fill=False, color='g')
+b02_2 = Dot(b12.value, fill=False, color='g')
+b13 = Line(b12.value, b23.value, color='g')
+b13_1 = Dot(b12.value, fill=False, color='g')
+b13_3 = Dot(b23.value, fill=False, color='g')
+b24 = Line(b23.value, b34.value, color='g')
+b24_2 = Dot(b23.value, fill=False, color='g')
+b24_4 = Dot(b34.value, fill=False, color='g')
+
+b03 = Line(b02.value, b13.value, color='b')
+b03_0 = Dot(b02.value, fill=False, color='b')
+b03_3 = Dot(b13.value, fill=False, color='b')
+b14 = Line(b13.value, b24.value, color='b')
+b14_1 = Dot(b13.value, fill=False, color='b')
+b14_4 = Dot(b24.value, fill=False, color='b')
+
+b04 = Line(b03.value, b14.value, color='purple')
+b04_0 = Dot(b03.value, color='purple')
+b04_4 = Dot(b14.value, color='purple')
+
+bzier_p = Dot(b04.value)
+bzier = Graph(b04.value, border_color='r')
+
