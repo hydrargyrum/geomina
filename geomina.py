@@ -16,13 +16,21 @@ __all__ = ('''cos sin tan pi e fmod ceil floor
 	global_registry'''.split())
 
 
-COLORS = {'none': (0,0,0,0), 'black': (0,0,0,1), 'red': (1,0,0,1), 'green': (0,1,0,1),
-          'blue': (0,0,1,1), 'white': (1,1,1,1)}
-COLORS['r'] = COLORS['red']
+COLORS = {'none': (0,0,0,0), 'black': (0,0,0,1), 'white': (1,1,1,1),
+          'grey': (0.5,0.5,0.5,1),
+          'red': (1,0,0,1), 'green': (0,1,0,1), 'blue': (0,0,1,1),
+          'cyan': (0,1,1,1), 'yellow': (1,1,0,1), 'magenta': (1,0,1,1),
+          'purple': (0.5,0,0.5,1)}
+
+COLORS['transparent'] = COLORS['none']
 COLORS['w'] = COLORS['white']
 COLORS['k'] = COLORS['black']
+COLORS['r'] = COLORS['red']
 COLORS['g'] = COLORS['green']
 COLORS['b'] = COLORS['blue']
+COLORS['c'] = COLORS['cyan']
+COLORS['m'] = COLORS['magenta']
+COLORS['y'] = COLORS['yellow']
 
 
 global_registry = []
