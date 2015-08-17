@@ -126,9 +126,9 @@ class Plotter:
 
 
 class Drawable(object):
-	def __init__(self, fill_color='none', border_color=None, border_width=None, hidden=False, register=True):
-		self.fill_color = obj_to_rgba(fill_color or 'none')
-		self.border_color = obj_to_rgba(border_color or 'black')
+	def __init__(self, fill_color='none', border_color='black', border_width=None, hidden=False, register=True):
+		self.fill_color = obj_to_rgba(fill_color)
+		self.border_color = obj_to_rgba(border_color)
 		self.border_width = border_width or 0.01
 
 		self.visible = not hidden
@@ -204,14 +204,13 @@ class Circle(Drawable):
 
 
 class Dot(Circle):
-	def __init__(self, center, color=None, fill=True):
-		color = color or 'black'
+	def __init__(self, center, color='black', fill=True):
 		fill_color = fill and color or 'none'
 		super(Dot, self).__init__(center=center, radius=0.05, fill_color=fill_color, border_color=color)
 
 
 class Line(Drawable):
-	def __init__(self, p1, p2, color=None, **kw):
+	def __init__(self, p1, p2, color='black', **kw):
 		super(Line, self).__init__(border_color=color, **kw)
 
 		self._p1 = p1
