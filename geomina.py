@@ -11,7 +11,7 @@ import shutil
 import cairo
 
 __all__ = ('''cos sin tan pi e fmod ceil floor
-	Plotter Circle Dot Line Graph Drawable Label
+	Plotter Circle Dot Line Graph Drawable Label Background
 	angle shift eval_at formatter
 	global_registry'''.split())
 
@@ -145,6 +145,16 @@ class Drawable(object):
 
 	def draw(self, ts, ctx):
 		raise NotImplementedError()
+
+
+class Background(Drawable):
+	def __init__(self, color='none', **kw):
+		super(Background, self).__init__(**kw)
+		self.color = obj_to_rgba(color)
+
+	def draw(self, ts, ctx):
+		ctx.set_source_rgba(*self.color)
+		ctx.paint()
 
 
 class Circle(Drawable):
