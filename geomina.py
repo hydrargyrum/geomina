@@ -10,7 +10,7 @@ import subprocess
 import shutil
 import cairo
 
-__all__ = ('''cos sin tan pi e fmod ceil floor
+__all__ = ('''cos sin tan pi e fmod ceil floor mirror
 	Plotter Circle Dot Line Graph Drawable Label Background
 	angle shift eval_at formatter
 	global_registry'''.split())
@@ -41,6 +41,9 @@ def angle(t, start_angle=0):
 
 def shift(t, move):
 	return (t + move) % 1
+
+def mirror(t):
+	return 1 - abs(t * 2 - 1)
 
 def eval_at(f, t):
 	if callable(f):
