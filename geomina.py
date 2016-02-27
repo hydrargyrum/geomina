@@ -10,17 +10,18 @@ import subprocess
 import shutil
 import cairo
 
+
 __all__ = ('''cos sin tan pi e fmod ceil floor mirror
 	Plotter Circle Dot Line Graph Drawable Label Background
 	angle shift eval_at formatter
 	global_registry'''.split())
 
 
-COLORS = {'none': (0,0,0,0), 'black': (0,0,0,1), 'white': (1,1,1,1),
-          'grey': (0.5,0.5,0.5,1),
-          'red': (1,0,0,1), 'green': (0,1,0,1), 'blue': (0,0,1,1),
-          'cyan': (0,1,1,1), 'yellow': (1,1,0,1), 'magenta': (1,0,1,1),
-          'purple': (0.5,0,0.5,1)}
+COLORS = {'none': (0, 0, 0, 0), 'black': (0, 0, 0, 1), 'white': (1, 1, 1, 1),
+          'grey': (0.5, 0.5, 0.5, 1),
+          'red': (1, 0, 0, 1), 'green': (0, 1, 0, 1), 'blue': (0, 0, 1, 1),
+          'cyan': (0, 1, 1, 1), 'yellow': (1, 1, 0, 1), 'magenta': (1, 0, 1, 1),
+          'purple': (0.5, 0, 0.5, 1)}
 
 COLORS['transparent'] = COLORS['none']
 COLORS['w'] = COLORS['white']
@@ -39,11 +40,14 @@ global_registry = []
 def angle(t, start_angle=0):
 	return t * 2 * pi + start_angle
 
+
 def shift(t, move):
 	return (t + move) % 1
 
+
 def mirror(t):
 	return 1 - abs(t * 2 - 1)
+
 
 def eval_at(f, t):
 	if callable(f):
@@ -51,8 +55,10 @@ def eval_at(f, t):
 	else:
 		return f
 
+
 def formatter(s):
 	return s.__mod__
+
 
 def linspace(start, stop, num=51):
 	def do():
@@ -60,6 +66,7 @@ def linspace(start, stop, num=51):
 		for i in xrange(num):
 			yield start + diff * i / (num - 1)
 	return list(do())
+
 
 def obj_to_rgba(s):
 	if s in COLORS:
@@ -348,6 +355,7 @@ def main():
 	opts.size = size
 
 	run_file(opts)
+
 
 if __name__ == '__main__':
 	main()
