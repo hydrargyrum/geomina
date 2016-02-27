@@ -4,7 +4,7 @@ from __future__ import division
 from math import cos, sin, tan, pi, e, fmod, ceil, floor
 import sys
 import os
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import tempfile
 import subprocess
 import shutil
@@ -324,11 +324,11 @@ def run_file(opts):
 
 
 def main():
-	argparser = ArgumentParser()
+	argparser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 	argparser.add_argument('input', metavar='FILE')
 	argparser.add_argument('output', metavar='OUTPUT')
-	argparser.add_argument('--zone', metavar='X,Y,X,Y', help='virtual canvas zone shown by the output image (default: -2,-2,2,2)', default='-2,-2,2,2')
-	argparser.add_argument('--size', metavar='WxH', help='size of output image (width and height, default: 512x512)', default='512x512')
+	argparser.add_argument('--zone', metavar='X,Y,X,Y', help='virtual canvas zone shown by the output image', default='-2,-2,2,2')
+	argparser.add_argument('--size', metavar='WxH', help='size of output image', default='512x512')
 	argparser.add_argument('-n', '--frames', metavar='FRAMES', help='number of frames', type=int, default=25)
 	argparser.add_argument('-d', '--delay', metavar='MS', help='delay between frames (in ms)', type=int, default=50)
 	opts = argparser.parse_args()
