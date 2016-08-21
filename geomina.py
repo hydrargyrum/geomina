@@ -105,7 +105,6 @@ class Plotter:
 		self.height = 512
 		self.win = [-1, -1, 1, 1]
 		self.nframes = 25
-		self.nsteps = 51
 
 	def set_resolution(self, x, y):
 		self.width = x
@@ -117,9 +116,6 @@ class Plotter:
 	def set_frames(self, n):
 		self.nframes = n
 
-	def set_steps(self, n):
-		self.nsteps = n
-
 	def _create_cairo(self):
 		surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.width, self.height)
 		ctx = cairo.Context(surface)
@@ -130,16 +126,16 @@ class Plotter:
 		return surface, ctx
 
 	def _draw(self, objs, t_start=0, t_end=1):
+		precision = (self.win[2] - self.win[0]) / self.width
+		precision = min(precision, (self.win[3] - self.win[1]) / self.height)
+
 		objs = [obj for obj in objs if obj.visible]
 
-		t_values = linspace(t_start, t_end, self.nsteps)
-		for i in range(self.nframes):
-			bound = 1 + ceil((len(t_values) - 1) * i / (self.nframes - 1))
-			bound = int(bound)
-			ts = t_values[:bound]
+		t_values = linspace(t_start, t_end, self.nframes)
+		for f_end in t_values:
 			surface, ctx = self._create_cairo()
 			for obj in objs:
-				obj.draw(ts, ctx)
+				obj.draw(ctx, t_start, f_end, precision=precision)
 			yield (surface, ctx)
 
 	def save_png(self, objs, pattern, t_start=0, t_end=1):
@@ -170,7 +166,9 @@ class Drawable(object):
 		if register:
 			global_registry.append(self)
 
-	def draw(self, ts, ctx):
+	def draw(self, ctx, t_start, t_end, **kwargs):
+		# kwargs:
+		# precision: a drawable may adapt its drawing so lines length do not exceed this value
 		raise NotImplementedError()
 
 
@@ -179,7 +177,7 @@ class Background(Drawable):
 		super(Background, self).__init__(**kw)
 		self.color = obj_to_rgba(color)
 
-	def draw(self, ts, ctx):
+	def draw(self, ctx, t_start, t_end, **kwargs):
 		ctx.set_source_rgba(*self.color)
 		ctx.paint()
 
@@ -220,16 +218,16 @@ class Circle(Drawable):
 		r = self.radius(t)
 		return (cos(self.sweep_end(t)) * r + c[0], sin(self.sweep_end(t)) * r + c[1])
 
-	def draw(self, ts, ctx):
-		c = self.center(ts[-1])
-		r = self.radius(ts[-1])
+	def draw(self, ctx, t_start, t_end, **kwargs):
+		c = self.center(t_end)
+		r = self.radius(t_end)
 
 		if self.full:
 			start, end = self.angle(0), self.angle(1)
 		elif self._sweep_start and self._sweep_end:
-			start, end = self.sweep_start(ts[-1]), self.sweep_end(ts[-1])
+			start, end = self.sweep_start(t_end), self.sweep_end(t_end)
 		else:
-			start, end = self.angle(ts[0]), self.angle(ts[-1])
+			start, end = self.angle(t_start), self.angle(t_end)
 
 		if start <= end:
 			ctx.arc(c[0], c[1], r, start, end)
@@ -272,9 +270,9 @@ class Line(Drawable):
 		p2 = self.p2(t)
 		return ((1 - t) * p1[0] + t * p2[0]), ((1 - t) * p1[1] + t * p2[1])
 
-	def draw(self, ts, ctx):
-		p1 = self.p1(ts[-1])
-		p2 = self.p2(ts[-1])
+	def draw(self, ctx, t_start, t_end, **kwargs):
+		p1 = self.p1(t_end)
+		p2 = self.p2(t_end)
 
 		ctx.set_line_width(self.border_width)
 		ctx.set_source_rgba(*self.border_color)
@@ -287,19 +285,41 @@ class Graph(Drawable):
 	def __init__(self, f, **kw):
 		super(Graph, self).__init__(**kw)
 		self._f = f
-	
+
 	def value(self, t):
 		return self._f(t)
 
-	def draw(self, ts, ctx):
-		# TODO be smarter for the number of points and placement/density of points
-		first = True
-		for t in ts:
-			if first:
-				ctx.move_to(*self._f(t))
+	def draw(self, ctx, t_start, t_end, **kwargs):
+		t = t_start
+		first_point = True
+		step = (t_end - t_start) / 2
+		precision = kwargs.pop('precision', 1)
+
+		while t < t_end:
+			if first_point:
+				point = self._f(t)
+				ctx.move_to(*point)
 			else:
-				ctx.line_to(*self._f(t))
-			first = False
+				# use smaller steps if 2 consecutive points may be too far apart
+				# TODO it's not useful to do small steps if points are on a line anyway
+				while True:
+					new_t = min(t_end, t + step)
+					new_point = self._f(new_t)
+
+					distance = abs(complex(*new_point) - complex(*point))
+					if distance < precision:
+						break
+
+					step /= 2
+
+				t = new_t
+				point = new_point
+				ctx.line_to(*point)
+				# TODO avoid expensive re-computation by painting over previous frames (per obj)?
+				# for obj in objs: obj.draw(previous_frame, current_frame, frame_data[obj])
+				# flatten frame_data
+
+			first_point = False
 
 		ctx.set_line_width(self.border_width)
 		ctx.set_source_rgba(*self.fill_color)
@@ -315,11 +335,11 @@ class Label(Drawable):
 		self._size = size
 		self._pos = pos
 
-	def draw(self, ts, ctx):
-		ctx.move_to(*eval_at(self._pos, ts[-1]))
-		ctx.set_font_size(eval_at(self._size, ts[-1]))
+	def draw(self, ctx, t_start, t_end, **kwargs):
+		ctx.move_to(*eval_at(self._pos, t_end))
+		ctx.set_font_size(eval_at(self._size, t_end))
 		ctx.set_source_rgba(*self.fill_color)
-		ctx.show_text(eval_at(self._text, ts[-1]))
+		ctx.show_text(eval_at(self._text, t_end))
 		ctx.fill()
 
 
