@@ -71,7 +71,7 @@ def formatter(s):
 def linspace(start, stop, num=51):
 	def do():
 		diff = stop - start
-		for i in xrange(num):
+		for i in range(num):
 			yield start + diff * i / (num - 1)
 	return list(do())
 
@@ -86,6 +86,17 @@ def obj_to_rgba(s):
 		elif len(s) == 9:
 			return (n >> 32 / 255., ((n >> 24) & 0xFF) / 255., ((n >> 8) & 0xFF) / 255., (n & 0xFF) / 255.)
 	return s
+
+
+if sys.version_info.major < 3:
+	range = xrange
+else:
+	def execfile(path, globals):
+		"""Exec Python `file` with `globals` as in Python 2"""
+		with open(path) as fd:
+			src = fd.read()
+		code = compile(src, path, 'exec')
+		exec(code, globals)  # pylint: disable=exec-used
 
 
 class Plotter:
@@ -122,7 +133,7 @@ class Plotter:
 		objs = [obj for obj in objs if obj.visible]
 
 		t_values = linspace(t_start, t_end, self.nsteps)
-		for i in xrange(self.nframes):
+		for i in range(self.nframes):
 			bound = 1 + ceil((len(t_values) - 1) * i / (self.nframes - 1))
 			bound = int(bound)
 			ts = t_values[:bound]
@@ -323,7 +334,7 @@ def run_file(opts):
 	g = globals()
 	vars = dict((k, g[k]) for k in __all__)
 	vars['plotter'] = plotter
-	module = execfile(opts.input, vars, vars)
+	module = execfile(opts.input, vars)
 
 	if opts.output.endswith('.gif'):
 		plotter.save_gif(global_registry, opts.output, delay=opts.delay)
@@ -348,7 +359,7 @@ def main():
 	if len(zone) != 4:
 		argparser.error('zone argument should be if X,Y,X,Y format')
 	try:
-		zone = map(float, zone)
+		zone = [float(x) for x in zone]
 	except ValueError:
 		argparser.error('zone argument should be if X,Y,X,Y format')
 	opts.zone = zone
@@ -357,7 +368,7 @@ def main():
 	if len(size) != 2:
 		argparser.error('size argument should be if WxH format')
 	try:
-		size = map(int, size)
+		size = [int(x) for x in size]
 	except ValueError:
 		argparser.error('size argument should be if WxH format')
 	opts.size = size
