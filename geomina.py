@@ -129,7 +129,7 @@ class Plotter:
 		ctx.translate((self.win[2] - self.win[0]) / 2, (self.win[3] - self.win[1]) / 2)
 		return surface, ctx
 
-	def _draw(self, objs, frame_cb, t_start=0, t_end=1):
+	def _draw(self, objs, t_start=0, t_end=1):
 		objs = [obj for obj in objs if obj.visible]
 
 		t_values = linspace(t_start, t_end, self.nsteps)
@@ -140,23 +140,21 @@ class Plotter:
 			surface, ctx = self._create_cairo()
 			for obj in objs:
 				obj.draw(ts, ctx)
-			frame_cb(surface, ctx, i)
+			yield (surface, ctx)
 
 	def save_png(self, objs, pattern, t_start=0, t_end=1):
-		def save(surface, ctx, i):
+		for i, (surface, ctx) in enumerate(self._draw(objs, t_start, t_end)):
 			surface.write_to_png('%s-%03d.png' % (pattern, i))
-		self._draw(objs, save, t_start, t_end)
 
 	def save_gif(self, objs, f, delay=100, t_start=0, t_end=1):
-		def save(surface, ctx, i):
-			png = os.path.join(tmp, '%06d.png' % i)
-			surface.write_to_png(png)
-			files.append(png)
-
 		files = []
 		tmp = tempfile.mkdtemp()
 		try:
-			self._draw(objs, save, t_start, t_end)
+			for i, (surface, ctx) in enumerate(self._draw(objs, t_start, t_end)):
+				png = os.path.join(tmp, '%06d.png' % i)
+				surface.write_to_png(png)
+				files.append(png)
+
 			subprocess.call(['convert', '-loop', '0', '-dispose', 'previous', '-delay', str(delay)] + files + [f])
 		finally:
 			shutil.rmtree(tmp)
