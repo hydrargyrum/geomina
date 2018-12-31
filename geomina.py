@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import division
+
 from math import cos, sin, tan, pi, e, fmod, ceil, floor
 import sys
 import os
@@ -8,13 +9,16 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import tempfile
 import subprocess
 import shutil
+
 import cairo
 
 
-__all__ = ('''cos sin tan pi e fmod ceil floor mirror
-	Plotter Circle Dot Line Graph Drawable Label Background
-	angle shift eval_at formatter
-	global_registry'''.split())
+__all__ = [
+	'cos', 'sin', 'tan', 'pi', 'e', 'fmod', 'ceil', 'floor', 'mirror',
+	'Plotter', 'Circle', 'Dot', 'Line', 'Graph', 'Drawable', 'Label', 'Background',
+	'angle', 'shift', 'eval_at', 'formatter',
+	'global_registry'
+]
 
 
 COLORS = {
@@ -352,7 +356,7 @@ def run_file(opts):
 	g = globals()
 	vars = dict((k, g[k]) for k in __all__)
 	vars['plotter'] = plotter
-	module = execfile(opts.input, vars)
+	execfile(opts.input, vars)
 
 	if opts.output.endswith('.gif'):
 		plotter.save_gif(global_registry, opts.output, delay=opts.delay)
