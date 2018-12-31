@@ -1,9 +1,6 @@
-#!/usr/bin/env python
-
-from __future__ import division
+#!/usr/bin/env python3
 
 from math import cos, sin, tan, pi, e, fmod, ceil, floor
-import sys
 import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import tempfile
@@ -92,15 +89,12 @@ def obj_to_rgba(s):
 	return s
 
 
-if sys.version_info.major < 3:
-	range = xrange
-else:
-	def execfile(path, globals):
-		"""Exec Python `file` with `globals` as in Python 2"""
-		with open(path) as fd:
-			src = fd.read()
-		code = compile(src, path, 'exec')
-		exec(code, globals)  # pylint: disable=exec-used
+def execfile(path, globals):
+	"""Exec Python `file` with `globals` as in Python 2"""
+	with open(path) as fd:
+		src = fd.read()
+	code = compile(src, path, 'exec')
+	exec(code, globals)  # pylint: disable=exec-used
 
 
 class Plotter:
@@ -160,7 +154,7 @@ class Plotter:
 			shutil.rmtree(tmp)
 
 
-class Drawable(object):
+class Drawable:
 	def __init__(self, fill_color='none', border_color='black', border_width=None, hidden=False, register=True):
 		self.fill_color = obj_to_rgba(fill_color)
 		self.border_color = obj_to_rgba(border_color)
