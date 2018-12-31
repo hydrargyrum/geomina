@@ -16,6 +16,7 @@ from PyQt5.QtGui import (
 __all__ = [
 	'cos', 'sin', 'tan', 'pi', 'e', 'fmod', 'ceil', 'floor', 'mirror',
 	'Plotter', 'Circle', 'Dot', 'Line', 'Graph', 'Drawable', 'Label', 'Background',
+	'Bezier',
 	'angle', 'shift', 'eval_at', 'formatter',
 	'global_registry'
 ]
@@ -364,6 +365,60 @@ class Label(Drawable):
 		pnt.setFont(f)
 
 		pnt.drawText(p, eval_at(self._text, t_end))
+
+
+class Bezier(Drawable):
+	def __init__(self, items, **kw):
+		super(Bezier, self).__init__(**kw)
+		self.items = items
+
+	def _eval_p(self, t, x, y):
+		return QPointF(eval_at(x, t), eval_at(y, t))
+
+	def _cmd_move_to(self, path, t, x, y):
+		path.moveTo(self._eval_p(t, x, y))
+
+	def _cmd_rel_move_to(self, path, t, x, y):
+		path.moveTo(path.currentPosition() + self._eval_p(t, x, y))
+
+	def _cmd_line_to(self, path, t, x, y):
+		path.lineTo(self._eval_p(t, x, y))
+
+	def _cmd_rel_line_to(self, path, t, x, y):
+		path.lineTo(path.currentPosition() + self._eval_p(t, x, y))
+
+	def _cmd_curve_to(self, path, t, c1x, c1y, c2x, c2y, ex, ey):
+		path.cubicTo(
+			self._eval_p(t, c1x, c1y),
+			self._eval_p(t, c2x, c2y),
+			self._eval_p(t, ex, ey)
+		)
+
+	def _cmd_rel_curve_to(self, path, t, c1x, c1y, c2x, c2y, ex, ey):
+		path.cubicTo(
+			path.currentPosition() + self._eval_p(t, c1x, c1y),
+			path.currentPosition() + self._eval_p(t, c2x, c2y),
+			path.currentPosition() + self._eval_p(t, ex, ey)
+		)
+
+	def _cmd_close_path(self, path):
+		path.closeSubPath()
+
+	def draw(self, pnt, t_start, t_end, **kwargs):
+		path = QPainterPath()
+		for cmd, *params in self.items:
+			func = getattr(self, '_cmd_%s' % cmd)
+			func(path, t_end, *params)
+
+		pen = QPen(QColor(*self._to_qt_color(self.border_color)))
+		pen.setWidth(self.border_width)
+		pnt.setPen(pen)
+		if any(self.fill_color):
+			brush = QBrush(QColor(*self._to_qt_color(self.fill_color)))
+			pnt.fillPath(path, brush)
+		else:
+			pnt.setBrush(QBrush())
+			pnt.drawPath(path)
 
 
 def run_file(opts):
