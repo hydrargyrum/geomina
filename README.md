@@ -31,7 +31,7 @@ The following image was rendered with Geomina:
 
 ## Dependencies ##
 
-Geomina depends on PyCairo for the rendering part and may require ImageMagick for saving animations to GIF.
+Geomina depends on PyQt for the rendering part and may require ImageMagick for saving animations to GIF.
 
 ## License ##
 

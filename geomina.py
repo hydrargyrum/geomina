@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 
-from math import cos, sin, tan, pi, e, fmod, ceil, floor
+from math import cos, sin, tan, pi, e, fmod, ceil, floor, degrees
 import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import tempfile
 import subprocess
 import shutil
 
-import cairo
+from PyQt5.QtCore import QPointF, QRectF
+from PyQt5.QtGui import (
+	QImage, QPainter, QPainterPath, QColor, QPen, QBrush, QFont,
+)
 
 
 __all__ = [
@@ -114,14 +117,19 @@ class Plotter:
 	def set_frames(self, n):
 		self.nframes = n
 
-	def _create_cairo(self):
-		surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.width, self.height)
-		ctx = cairo.Context(surface)
-		ctx.translate((self.win[0] + self.win[2]) / 2, (self.win[1] + self.win[3]) / 2)
-		ctx.scale(self.width / (self.win[2] - self.win[0]), self.height / (self.win[3] - self.win[1]))
-		ctx.translate(-(self.win[0] + self.win[2]) / 2, -(self.win[1] + self.win[3]) / 2)
-		ctx.translate((self.win[2] - self.win[0]) / 2, (self.win[3] - self.win[1]) / 2)
-		return surface, ctx
+	def _create_qt(self):
+		img = QImage(self.width, self.height, QImage.Format_ARGB32)
+		img.fill(0)
+
+		pnt = QPainter(img)
+		pnt.setRenderHint(QPainter.Antialiasing)
+
+		pnt.translate((self.win[0] + self.win[2]) / 2, (self.win[1] + self.win[3]) / 2)
+		pnt.scale(self.width / (self.win[2] - self.win[0]), self.height / (self.win[3] - self.win[1]))
+		pnt.translate(-(self.win[0] + self.win[2]) / 2, -(self.win[1] + self.win[3]) / 2)
+		pnt.translate((self.win[2] - self.win[0]) / 2, (self.win[3] - self.win[1]) / 2)
+
+		return img, pnt
 
 	def _draw(self, objs, t_start=0, t_end=1):
 		precision = (self.win[2] - self.win[0]) / self.width
@@ -131,22 +139,23 @@ class Plotter:
 
 		t_values = linspace(t_start, t_end, self.nframes)
 		for f_end in t_values:
-			surface, ctx = self._create_cairo()
+			img, pnt = self._create_qt()
 			for obj in objs:
-				obj.draw(ctx, t_start, f_end, precision=precision)
-			yield (surface, ctx)
+				obj.draw(pnt, t_start, f_end, precision=precision)
+			pnt.end()
+			yield (img, pnt)
 
 	def save_png(self, objs, pattern, t_start=0, t_end=1):
-		for i, (surface, ctx) in enumerate(self._draw(objs, t_start, t_end)):
-			surface.write_to_png('%s-%03d.png' % (pattern, i))
+		for i, (img, _) in enumerate(self._draw(objs, t_start, t_end)):
+			img.save('%s-%03d.png' % (pattern, i))
 
 	def save_gif(self, objs, f, delay=100, t_start=0, t_end=1):
 		files = []
 		tmp = tempfile.mkdtemp()
 		try:
-			for i, (surface, ctx) in enumerate(self._draw(objs, t_start, t_end)):
+			for i, (img, _) in enumerate(self._draw(objs, t_start, t_end)):
 				png = os.path.join(tmp, '%06d.png' % i)
-				surface.write_to_png(png)
+				img.save(png)
 				files.append(png)
 
 			subprocess.call(['convert', '-loop', '0', '-dispose', 'previous', '-delay', str(delay)] + files + [f])
@@ -169,15 +178,25 @@ class Drawable:
 		# precision: a drawable may adapt its drawing so lines length do not exceed this value
 		raise NotImplementedError()
 
+	def _to_qt_color(self, tup):
+		return [int(c * 255) for c in tup]
+
 
 class Background(Drawable):
 	def __init__(self, color='none', **kw):
 		super(Background, self).__init__(**kw)
 		self.color = obj_to_rgba(color)
 
-	def draw(self, ctx, t_start, t_end, **kwargs):
-		ctx.set_source_rgba(*self.color)
-		ctx.paint()
+	def draw(self, pnt, t_start, t_end, **kwargs):
+		pnt.save()
+		try:
+			dev = pnt.device()
+			brush = QBrush(QColor(*self._to_qt_color(self.color)))
+
+			pnt.resetTransform()
+			pnt.fillRect(0, 0, dev.width(), dev.height(), brush)
+		finally:
+			pnt.restore()
 
 
 class Circle(Drawable):
@@ -216,7 +235,7 @@ class Circle(Drawable):
 		r = self.radius(t)
 		return (cos(self.sweep_end(t)) * r + c[0], sin(self.sweep_end(t)) * r + c[1])
 
-	def draw(self, ctx, t_start, t_end, **kwargs):
+	def draw(self, pnt, t_start, t_end, **kwargs):
 		c = self.center(t_end)
 		r = self.radius(t_end)
 
@@ -227,16 +246,12 @@ class Circle(Drawable):
 		else:
 			start, end = self.angle(t_start), self.angle(t_end)
 
-		if start <= end:
-			ctx.arc(c[0], c[1], r, start, end)
-		else:
-			ctx.arc_negative(c[0], c[1], r, start, end)
-
-		ctx.set_line_width(self.border_width)
-		ctx.set_source_rgba(*self.fill_color)
-		ctx.fill_preserve()
-		ctx.set_source_rgba(*self.border_color)
-		ctx.stroke()
+		pen = QPen(QColor(*self._to_qt_color(self.border_color)))
+		pen.setWidth(self.border_width)
+		pnt.setPen(pen)
+		brush = QBrush(QColor(*self._to_qt_color(self.fill_color)))
+		pnt.setBrush(brush)
+		pnt.drawArc(QRectF(c[0] - r, c[1] - r, 2 * r, 2 * r), degrees(start) * 16, degrees(end - start) * 16)
 
 	def value(self, t):
 		c = self.center(t)
@@ -268,15 +283,14 @@ class Line(Drawable):
 		p2 = self.p2(t)
 		return ((1 - t) * p1[0] + t * p2[0]), ((1 - t) * p1[1] + t * p2[1])
 
-	def draw(self, ctx, t_start, t_end, **kwargs):
+	def draw(self, pnt, t_start, t_end, **kwargs):
 		p1 = self.p1(t_end)
 		p2 = self.p2(t_end)
 
-		ctx.set_line_width(self.border_width)
-		ctx.set_source_rgba(*self.border_color)
-		ctx.move_to(p1[0], p1[1])
-		ctx.line_to(p2[0], p2[1])
-		ctx.stroke()
+		pen = QPen(QColor(*self._to_qt_color(self.border_color)))
+		pen.setWidth(self.border_width)
+		pnt.setPen(pen)
+		pnt.drawLine(QPointF(*p1), QPointF(*p2))
 
 
 class Graph(Drawable):
@@ -287,16 +301,17 @@ class Graph(Drawable):
 	def value(self, t):
 		return self._f(t)
 
-	def draw(self, ctx, t_start, t_end, **kwargs):
+	def draw(self, pnt, t_start, t_end, **kwargs):
 		t = t_start
 		first_point = True
 		step = (t_end - t_start) / 2
 		precision = kwargs.pop('precision', 1)
 
+		path = QPainterPath()
 		while t < t_end:
 			if first_point:
 				point = self._f(t)
-				ctx.move_to(*point)
+				path.moveTo(*point)
 			else:
 				# use smaller steps if 2 consecutive points may be too far apart
 				# TODO it's not useful to do small steps if points are on a line anyway
@@ -312,18 +327,22 @@ class Graph(Drawable):
 
 				t = new_t
 				point = new_point
-				ctx.line_to(*point)
+				path.lineTo(*point)
 				# TODO avoid expensive re-computation by painting over previous frames (per obj)?
 				# for obj in objs: obj.draw(previous_frame, current_frame, frame_data[obj])
 				# flatten frame_data
 
 			first_point = False
 
-		ctx.set_line_width(self.border_width)
-		ctx.set_source_rgba(*self.fill_color)
-		ctx.fill_preserve()
-		ctx.set_source_rgba(*self.border_color)
-		ctx.stroke()
+		pen = QPen(QColor(*self._to_qt_color(self.border_color)))
+		pen.setWidth(self.border_width)
+		pnt.setPen(pen)
+		if any(self.fill_color):
+			brush = QBrush(QColor(*self._to_qt_color(self.fill_color)))
+			pnt.fillPath(path, brush)
+		else:
+			pnt.setBrush(QBrush())
+			pnt.drawPath(path)
 
 
 class Label(Drawable):
@@ -333,12 +352,18 @@ class Label(Drawable):
 		self._size = size
 		self._pos = pos
 
-	def draw(self, ctx, t_start, t_end, **kwargs):
-		ctx.move_to(*eval_at(self._pos, t_end))
-		ctx.set_font_size(eval_at(self._size, t_end))
-		ctx.set_source_rgba(*self.fill_color)
-		ctx.show_text(eval_at(self._text, t_end))
-		ctx.fill()
+	def draw(self, pnt, t_start, t_end, **kwargs):
+		p = QPointF(*eval_at(self._pos, t_end))
+
+		pen = QPen(QColor(*self._to_qt_color(self.border_color)))
+		pen.setWidth(self.border_width)
+		pnt.setPen(pen)
+
+		f = QFont()
+		f.setPointSizeF(eval_at(self._size, t_end))
+		pnt.setFont(f)
+
+		pnt.drawText(p, eval_at(self._text, t_end))
 
 
 def run_file(opts):
